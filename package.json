@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "An api for capturing screenshot of a webpage and sending it to client for downloading.",
   "main": "app.js",
+  "type": "module",
   "scripts": {
     "format": "prettier --write .",
     "start": "nodemon app.js",
@@ -19,6 +20,7 @@
   "license": "ISC",
   "dependencies": {
     "dotenv": "^16.5.0",
+    "ejs": "^3.1.10",
     "express": "^5.1.0",
     "prettier": "^3.5.3",
     "zod": "^3.25.46"
