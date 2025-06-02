@@ -22,7 +22,10 @@
     "dotenv": "^16.5.0",
     "ejs": "^3.1.10",
     "express": "^5.1.0",
+    "multer": "^2.0.0",
     "prettier": "^3.5.3",
+    "puppeteer": "^24.10.0",
+    "url": "^0.11.4",
     "zod": "^3.25.46"
   },
   "devDependencies": {
