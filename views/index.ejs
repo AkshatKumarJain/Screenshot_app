@@ -1,16 +1,14 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HTML page</title>
-    <link rel="stylesheet" href="/stylesheets/style.css">
-</head>
+<html>
+<head><title>Upload and Screenshot</title></head>
 <body>
-    <h1>Screenshot app</h1>
-    <form action="/screenshot" method="post">
-        <button onclick="takeScreenshot()">Take Screenshot</button>
-    </form>
-    <script src="/javascripts/script.js"></script>
+  <h2>Upload an Image</h2>
+  <form action="/upload" method="POST" enctype="multipart/form-data">
+    <input type="file" name="image" required />
+    <button type="submit">Upload</button>
+  </form>
+
+  <br><br>
+  <button onclick="window.location.href='/screenshot'">Take Screenshot</button>
 </body>
 </html>
