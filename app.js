@@ -1,33 +1,22 @@
-import express from "express";
-import "dotenv/config.js"
-import puppeteer from "puppeteer";
-import path from "path"
-import { fileURLToPath } from "url";
+import express from 'express';
+import path from 'path';
+import { __dirname } from './utils/pathHelper.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import uploadRoute from './routes/upload.js';
+import screenshotRoute from './routes/screenshot.js';
 
 const app = express();
 
-app.set("view engine", "ejs");
-app.set('views', './views');
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-app.use(express.static('public'));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-  app.get("/screenshot", async (req, res) => {
-  const url = req.query.url || "https://google.com";
-  const browser = await puppeteer.launch();
-  const page = await browser.newPage();
-  await page.goto(url);
-  const screenshotPath = path.join(__dirname, "/public/screenshot.png");
-  await page.screenshot({ path: screenshotPath });
-  await browser.close();
-
-  res.status(201).sendFile(screenshotPath);
+app.get('/preview', (req, res) => {
+  res.sendFile(path.join(__dirname, 'views', 'image-viewer.html'));
 });
 
-app.listen(process.env.PORT || 8000, (err) => {
-    console.log(`The server is running at port: ${process.env.PORT}.`);
+app.use('/upload', uploadRoute);
+app.use('/screenshot', screenshotRoute);
+
+app.listen(process.env.PORT, () => {
+  console.log(`✅ App running at port:${process.env.PORT}`);
 });
