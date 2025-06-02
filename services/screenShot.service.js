@@ -1,5 +1,6 @@
 import puppeteer from 'puppeteer';
 
+// for capturing the screenshot of the image
 export async function captureScreenshot(url, savePath) {
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
