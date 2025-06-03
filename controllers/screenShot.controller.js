@@ -7,7 +7,7 @@ export async function handleScreenshot(req, res) {
   const imageUrl = req.app.locals.imageUrl;
 
   if (!imageUrl) {
-    return res.status(400).send("No image uploaded.");
+    return res.status(400).send('No image uploaded.');
   }
 
   const screenshotPath = path.join(__dirname, 'uploads', 'screenshot.png');
