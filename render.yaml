@@ -4,22 +4,80 @@ services:
     env: node
     plan: free
     buildCommand: |
-      # Install dependencies for Chrome
-      apt-get update
-      apt-get install -y ca-certificates fonts-liberation libappindicator3-1 libasound2 libatk-bridge2.0-0 libatk1.0-0 libc6 libcairo2 libcups2 libdbus-1-3 libexpat1 libfontconfig1 libgbm1 libgcc1 libglib2.0-0 libgtk-3-0 libnspr4 libnss3 libpango-1.0-0 libpangocairo-1.0-0 libstdc++6 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 lsb-release wget xdg-utils
+      # Update package lists and install essential tools
+      sudo apt-get update
+      sudo apt-get install -y gnupg curl wget ca-certificates
+
+      # Install all Chrome dependencies
+      sudo apt-get install -y \
+        ca-certificates \
+        fonts-liberation \
+        libappindicator3-1 \
+        libasound2 \
+        libatk-bridge2.0-0 \
+        libatk1.0-0 \
+        libc6 \
+        libcairo2 \
+        libcups2 \
+        libdbus-1-3 \
+        libexpat1 \
+        libfontconfig1 \
+        libgbm1 \
+        libgcc1 \
+        libglib2.0-0 \
+        libgtk-3-0 \
+        libnspr4 \
+        libnss3 \
+        libpango-1.0-0 \
+        libpangocairo-1.0-0 \
+        libstdc++6 \
+        libx11-6 \
+        libx11-xcb1 \
+        libxcb1 \
+        libxcomposite1 \
+        libxcursor1 \
+        libxdamage1 \
+        libxext6 \
+        libxfixes3 \
+        libxi6 \
+        libxrandr2 \
+        libxrender1 \
+        libxss1 \
+        libxtst6 \
+        lsb-release \
+        xdg-utils \
+        libgdk-pixbuf2.0-0 \
+        libgtk2.0-0 \
+        libnotify-dev \
+        libgconf-2-4 \
+        libxinerama1 \
+        libxkbcommon0 \
+        xvfb
       
-      # Install latest Google Chrome
-      wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add -
-      echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list
-      apt-get update
-      apt-get install -y google-chrome-stable
+      # Install Chrome using the recommended method
+      wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+      sudo dpkg -i /tmp/chrome.deb || sudo apt-get install -fy
+      rm /tmp/chrome.deb
       
-      # Verify Chrome installation
+      # Verify Chrome installation and show version
       google-chrome-stable --version
       
-      # Install Node dependencies
-      npm install
+      # Create a chrome-user directory and set permissions
+      mkdir -p /tmp/chrome-user-data
+      chmod -R 777 /tmp/chrome-user-data
+      
+      # Verify Chrome can run headless
+      google-chrome-stable --headless --disable-gpu --no-sandbox --disable-dev-shm-usage --user-data-dir=/tmp/chrome-user-data about:blank --dump-dom
+      
+      # Install Node dependencies with production optimization
+      npm ci --omit=dev
+      
+      # Print Chrome path for debugging
+      which google-chrome-stable
+      ls -la /usr/bin/google-chrome-stable
     startCommand: npm start
+    healthCheckPath: /
+    healthCheckTimeout: 5000
     envVars:
       - key: NODE_ENV
         value: production
@@ -32,4 +90,11 @@ services:
       # RENDER_EXTERNAL_URL is automatically provided by Render
       - key: RENDER_EXTERNAL_URL
         sync: false
+      # Additional Chrome configuration
+      - key: CHROME_PATH
+        value: /usr/bin/google-chrome-stable
+      - key: PUPPETEER_CACHE_DIR
+        value: /tmp
+      - key: PUPPETEER_DOWNLOAD_HOST
+        value: https://storage.googleapis.com
 
