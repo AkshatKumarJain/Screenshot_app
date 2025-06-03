@@ -122,27 +122,105 @@ export async function captureScreenshot(imageUrl, savePath) {
     console.log("Viewport set to 1280x800");
     
     // Navigate with a longer timeout for production
-    console.log(`Navigating to ${fullUrl} with timeout ${isProduction ? 90000 : 60000}ms`);
+    console.log(`Navigating to ${fullUrl} with timeout ${isProduction ? 120000 : 60000}ms`);
     await page.goto(fullUrl, { 
       waitUntil: 'networkidle0', 
-      timeout: isProduction ? 90000 : 60000 
+      timeout: isProduction ? 120000 : 60000 
     });
     
     console.log("Page loaded, waiting for image");
     
-    // Wait for the image to be visible and fully loaded
-    await page.waitForSelector('img', { visible: true, timeout: 30000 });
-    await page.waitForFunction(() => {
-      const img = document.querySelector('img');
-      return img && img.complete && img.naturalHeight !== 0;
-    }, { timeout: 30000 });
+    // Check if we have any page errors right away
+    const pageContent = await page.content();
+    console.log("Initial page HTML length:", pageContent.length);
+    if (pageContent.length < 100) {
+      console.error("Page seems to have minimal content, might indicate an error");
+    }
     
-    console.log("Image loaded, taking screenshot");
-    
-    // Take the screenshot
-    console.log("Taking screenshot now...");
-    await page.screenshot({ path: savePath });
-    console.log(`Screenshot saved to ${savePath}`);
+    // Wait for either success or error state
+    try {
+      // First check if we got an error
+      const hasError = await Promise.race([
+        page.waitForSelector('body[data-image-error="true"]', { timeout: 5000 })
+          .then(() => true)
+          .catch(() => false),
+        page.waitForSelector('body[data-image-loaded="true"]', { timeout: 5000 })
+          .then(() => false)
+          .catch(() => false)
+      ]);
+      
+      if (hasError) {
+        console.error("Image failed to load according to page error state");
+        throw new Error("Image failed to load in the preview page");
+      }
+      
+      // Wait for the image to be fully loaded with better waiting strategy
+      console.log("Waiting for image to be fully loaded...");
+      
+      // First wait for the image element to exist
+      await page.waitForSelector('img#previewImage', { 
+        visible: true, 
+        timeout: isProduction ? 60000 : 30000 
+      });
+      
+      // Then wait for the loaded attribute to be set by our JavaScript
+      await page.waitForSelector('body[data-image-loaded="true"]', { 
+        timeout: isProduction ? 60000 : 30000 
+      });
+      
+      console.log("Image loaded successfully according to page state");
+      
+      // Get image dimensions for better viewport sizing
+      const imageDimensions = await page.evaluate(() => {
+        const img = document.querySelector('img#previewImage');
+        return {
+          naturalWidth: img.naturalWidth,
+          naturalHeight: img.naturalHeight,
+          displayWidth: img.width,
+          displayHeight: img.height
+        };
+      });
+      
+      console.log("Image dimensions:", imageDimensions);
+      
+      // Resize viewport to better fit the image if needed
+      if (imageDimensions.naturalWidth > 0 && imageDimensions.naturalHeight > 0) {
+        const viewportWidth = Math.max(imageDimensions.naturalWidth, 1280);
+        const viewportHeight = Math.max(imageDimensions.naturalHeight, 800);
+        
+        console.log(`Resizing viewport to ${viewportWidth}x${viewportHeight}`);
+        await page.setViewport({
+          width: Math.min(viewportWidth, 2000),  // Cap at 2000px
+          height: Math.min(viewportHeight, 2000) // Cap at 2000px
+        });
+      }
+      
+      // Add a small delay to ensure everything is rendered
+      await page.waitForTimeout(1000);
+      
+      console.log("Taking screenshot now...");
+      await page.screenshot({ 
+        path: savePath,
+        fullPage: true
+      });
+      console.log(`Screenshot saved to ${savePath}`);
+    } catch (err) {
+      console.error("Error while waiting for image:", err.message);
+      
+      // Take a screenshot anyway to help with debugging
+      console.log("Taking debug screenshot despite error...");
+      await page.screenshot({ 
+        path: savePath + '.error.png',
+        fullPage: true
+      });
+      
+      // Get page HTML for debugging
+      const html = await page.content();
+      console.log("Page HTML at time of error (first 500 chars):", html.substring(0, 500));
+      
+      // Re-throw the error
+      throw err;
+    }
     
     logMemoryUsage();
     console.log("=== SCREENSHOT CAPTURE COMPLETED SUCCESSFULLY ===");
