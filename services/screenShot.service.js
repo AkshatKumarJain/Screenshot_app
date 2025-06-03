@@ -69,26 +69,75 @@ export async function captureScreenshot(imageUrl, savePath) {
   let browser = null;
   
   try {
-    // Configure Puppeteer based on environment
-    const options = {
-      headless: 'new',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-        '--disable-gpu'
-      ]
-    };
-    
-    // In production, use the system Chrome installation
-    if (isProduction && process.env.PUPPETEER_EXECUTABLE_PATH) {
-      console.log(`Using Chrome at: ${process.env.PUPPETEER_EXECUTABLE_PATH}`);
-      options.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+    // Create a user data directory in /tmp for Chrome
+    const userDataDir = '/tmp/puppeteer_user_data';
+    try {
+      if (!fs.existsSync(userDataDir)) {
+        fs.mkdirSync(userDataDir, { recursive: true, mode: 0o777 });
+        console.log(`Created user data directory at ${userDataDir}`);
+      }
+    } catch (error) {
+      console.error(`Failed to create user data directory: ${error.message}`);
     }
+    
+    // Configure Puppeteer based on environment
+    let options;
+    
+    if (isProduction) {
+      // Special configuration for Render environment
+      console.log("Using Render-specific Puppeteer configuration");
+      options = {
+        headless: 'new',
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',
+        userDataDir: userDataDir,
+        timeout: 180000, // 3 minutes overall timeout
+        ignoreHTTPSErrors: true,
+        dumpio: true, // Log stdout and stderr from the browser
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--disable-gpu',
+          '--disable-software-rasterizer',
+          '--font-render-hinting=none',
+          '--disable-extensions',
+          '--disable-background-networking',
+          '--disable-default-apps',
+          '--disable-sync',
+          '--disable-translate',
+          '--hide-scrollbars',
+          '--metrics-recording-only',
+          '--mute-audio',
+          '--no-first-run',
+          '--no-zygote',
+          '--headless',
+          '--single-process', // Important for Render
+          `--user-data-dir=${userDataDir}`,
+          '--window-size=1280,800',
+          '--remote-debugging-port=0',
+          '--disable-web-security',
+          '--allow-file-access-from-files'
+        ]
+      };
+    } else {
+      // Local development configuration
+      options = {
+        headless: 'new',
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--disable-gpu'
+        ]
+      };
+    }
+    
+    console.log("Chrome executable path check:");
+    console.log(`  PUPPETEER_EXECUTABLE_PATH env: ${process.env.PUPPETEER_EXECUTABLE_PATH || 'not set'}`);
+    console.log(`  Using executable path: ${options.executablePath || 'default bundled Chromium'}`);
     
     console.log("Launching browser with options:", JSON.stringify(options, null, 2));
     browser = await puppeteer.launch(options);
