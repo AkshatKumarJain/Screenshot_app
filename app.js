@@ -30,105 +30,128 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.get('/debug', async (req, res) => {
   console.log('=== DEBUG ROUTE ACCESSED ===');
   
+  // Build a response object to collect diagnostic information
+  const diagnostics = {
+    timestamp: new Date().toISOString(),
+    system: {},
+    chrome: {},
+    environment: {},
+    tests: [],
+    errors: []
+  };
+  
   // Set response timeout
   res.setTimeout(120000); // 2 minute timeout
   
-  // Log system info
-  console.log('System information:');
-  console.log(`  Platform: ${os.platform()}`);
-  console.log(`  Architecture: ${os.arch()}`);
-  console.log(`  CPUs: ${os.cpus().length}`);
-  console.log(`  Memory: ${Math.round(os.totalmem() / 1024 / 1024)} MB total, ${Math.round(os.freemem() / 1024 / 1024)} MB free`);
-  
-  // Log process info
-  const memoryUsage = process.memoryUsage();
-  console.log('Process memory usage:');
-  console.log(`  RSS: ${Math.round(memoryUsage.rss / 1024 / 1024)} MB`);
-  console.log(`  Heap Total: ${Math.round(memoryUsage.heapTotal / 1024 / 1024)} MB`);
-  console.log(`  Heap Used: ${Math.round(memoryUsage.heapUsed / 1024 / 1024)} MB`);
-  
+  // Log and collect system info
   try {
-    console.log('Puppeteer imported successfully');
+    console.log('System information:');
+    diagnostics.system.platform = os.platform();
+    diagnostics.system.architecture = os.arch();
+    diagnostics.system.cpus = os.cpus().length;
+    diagnostics.system.totalMemory = `${Math.round(os.totalmem() / 1024 / 1024)} MB`;
+    diagnostics.system.freeMemory = `${Math.round(os.freemem() / 1024 / 1024)} MB`;
     
-    // Create test HTML content
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Debug Test</title>
-        <style>
-          body { font-family: Arial, sans-serif; padding: 20px; background: #f0f0f0; }
-          .container { background: white; padding: 20px; border-radius: 5px; }
-          h1 { color: #333; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <h1>Puppeteer Debug Test</h1>
-          <p>Current time: ${new Date().toISOString()}</p>
-          <p>This is a test page for Puppeteer screenshot functionality.</p>
-        </div>
-      </body>
-      </html>
-    `;
+    // Log process info
+    const memoryUsage = process.memoryUsage();
+    diagnostics.system.processMemory = {
+      rss: `${Math.round(memoryUsage.rss / 1024 / 1024)} MB`,
+      heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)} MB`,
+      heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)} MB`
+    };
     
-    // Set up a simple file path for the screenshot
-    const fs = await import('fs');
-    const path = await import('path');
-    const tmpDir = '/tmp';
-    const screenshotPath = path.join(tmpDir, `debug-screenshot-${Date.now()}.png`);
+    console.log(`Platform: ${diagnostics.system.platform}`);
+    console.log(`Architecture: ${diagnostics.system.architecture}`);
+    console.log(`CPUs: ${diagnostics.system.cpus}`);
+    console.log(`Memory: ${diagnostics.system.totalMemory} total, ${diagnostics.system.freeMemory} free`);
     
-    // Ensure tmp directory exists
-    if (!fs.existsSync(tmpDir)) {
-      fs.mkdirSync(tmpDir, { recursive: true });
+    // Check environment variables
+    diagnostics.environment.NODE_ENV = process.env.NODE_ENV || 'not set';
+    diagnostics.environment.PUPPETEER_EXECUTABLE_PATH = process.env.PUPPETEER_EXECUTABLE_PATH || 'not set';
+    diagnostics.environment.CHROME_PATH = process.env.CHROME_PATH || 'not set';
+    
+    console.log('Environment variables:');
+    console.log(`NODE_ENV: ${diagnostics.environment.NODE_ENV}`);
+    console.log(`PUPPETEER_EXECUTABLE_PATH: ${diagnostics.environment.PUPPETEER_EXECUTABLE_PATH}`);
+    console.log(`CHROME_PATH: ${diagnostics.environment.CHROME_PATH}`);
+    
+    // Test 1: Check if Chrome executable exists
+    diagnostics.tests.push({ name: "Chrome executable check", status: "running" });
+    console.log('Checking Chrome executable...');
+    
+    const execPath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable';
+    try {
+      const { execSync } = require('child_process');
+      const chromeVersion = execSync(`${execPath} --version`).toString().trim();
+      console.log(`Chrome version: ${chromeVersion}`);
+      diagnostics.chrome.version = chromeVersion;
+      diagnostics.tests[0].status = "success";
+      diagnostics.tests[0].result = chromeVersion;
+    } catch (error) {
+      console.error(`Error checking Chrome version: ${error.message}`);
+      diagnostics.tests[0].status = "failed";
+      diagnostics.tests[0].error = error.message;
+      diagnostics.errors.push({
+        stage: "Chrome executable check",
+        error: error.message
+      });
     }
     
-    console.log(`Creating screenshot at: ${screenshotPath}`);
+    // Test 2: Try to launch browser without page creation
+    diagnostics.tests.push({ name: "Browser launch test", status: "running" });
+    console.log('Attempting to launch browser...');
     
-    // Basic browser configuration for debugging
-    const browser = await puppeteer.launch({
-      headless: 'new',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage'
-      ],
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
-    });
-    
-    console.log('Browser launched successfully');
-    console.log(`Browser version: ${await browser.version()}`);
-    
-    // Create a new page and set content
-    const page = await browser.newPage();
-    await page.setContent(htmlContent);
-    console.log('Page content set successfully');
-    
-    // Take a screenshot
-    await page.screenshot({ path: screenshotPath });
-    console.log('Screenshot captured successfully');
-    
-    // Close the browser
-    await browser.close();
-    console.log('Browser closed successfully');
-    
-    // Check if the screenshot was created
-    if (fs.existsSync(screenshotPath)) {
-      // Send the screenshot back to the client
-      res.sendFile(screenshotPath, (err) => {
-        if (err) {
-          console.error('Error sending file:', err);
-        }
-        // Clean up the screenshot file
-        fs.unlink(screenshotPath, () => {});
+    try {
+      const minimalOptions = {
+        headless: 'new',
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage'
+        ],
+        executablePath: execPath
+      };
+      
+      console.log(`Launch options: ${JSON.stringify(minimalOptions, null, 2)}`);
+      
+      const browser = await puppeteer.launch(minimalOptions);
+      const version = await browser.version();
+      console.log(`Browser launched successfully. Version: ${version}`);
+      
+      diagnostics.chrome.browserVersion = version;
+      diagnostics.tests[1].status = "success";
+      diagnostics.tests[1].result = version;
+      
+      await browser.close();
+      console.log('Browser closed successfully');
+    } catch (error) {
+      console.error(`Error launching browser: ${error.message}`);
+      diagnostics.tests[1].status = "failed";
+      diagnostics.tests[1].error = error.message;
+      diagnostics.errors.push({
+        stage: "Browser launch",
+        error: error.message,
+        stack: error.stack
       });
+    }
+    
+    // Send diagnostic information
+    if (diagnostics.errors.length > 0) {
+      res.status(500).json(diagnostics);
     } else {
-      res.status(500).send('Failed to create screenshot');
+      res.status(200).json(diagnostics);
     }
   } catch (error) {
     console.error('=== DEBUG ROUTE ERROR ===');
     console.error(error);
-    res.status(500).send(`Debug Error: ${error.message}\n\nStack: ${error.stack}`);
+    
+    diagnostics.errors.push({
+      stage: "Overall diagnostics",
+      error: error.message,
+      stack: error.stack
+    });
+    
+    res.status(500).json(diagnostics);
   }
 });
 
