@@ -1,12 +1,20 @@
 import puppeteer from 'puppeteer';
 
 export async function captureScreenshot(imageUrl, savePath) {
-  const browser = await puppeteer.launch();
-  const page = await browser.newPage();
-  const fullUrl = `${process.env.BASE_URL}/preview?image=${encodeURIComponent(imageUrl)}`;
-  console.log('Navigating to:', fullUrl);
+  const BASE_URL = process.env.BASE_URL || `http://localhost:${process.env.PORT || 8000}`;
+  const fullUrl = `${BASE_URL}/preview?image=${encodeURIComponent(imageUrl)}`;
 
-  await page.goto(fullUrl, { waitUntil: 'networkidle0' });
+  console.log("Navigating to:", fullUrl);
+
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'] // Needed for Render
+  });
+
+  const page = await browser.newPage();
+
+  await page.goto(fullUrl, { waitUntil: 'networkidle0', timeout: 60000 });
+
   await page.waitForSelector('img', { visible: true });
   await page.waitForFunction(() => {
     const img = document.querySelector('img');
@@ -15,4 +23,6 @@ export async function captureScreenshot(imageUrl, savePath) {
 
   await page.screenshot({ path: savePath });
   await browser.close();
+
+  console.log(`Screenshot saved to ${savePath}`);
 }
