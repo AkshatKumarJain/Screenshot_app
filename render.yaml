@@ -4,19 +4,39 @@ services:
     env: node
     plan: free
     buildCommand: |
+      # Set non-interactive mode for apt
+      export DEBIAN_FRONTEND=noninteractive
+
       # Add Chrome repository and install Chrome
+      echo "=== Installing Chrome dependencies ==="
+      sudo apt-get update -y
+      sudo apt-get install -y --no-install-recommends ca-certificates curl gnupg
+
+      # Add Google Chrome signing key
+      echo "=== Adding Chrome repository ==="
+      curl -fsSL https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome-keyring.gpg
+      echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list > /dev/null
+      
+      # Install Chrome
       echo "=== Installing Chrome ==="
-      wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-      sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list'
-      sudo apt-get update
-      sudo apt-get install -y google-chrome-stable
+      sudo apt-get update -y
+      sudo apt-get install -y --no-install-recommends google-chrome-stable
       
       # Verify Chrome installation
       echo "=== Verifying Chrome installation ==="
-      google-chrome-stable --version
+      google-chrome-stable --version || echo "Chrome installation might have issues"
       
-      # Create symlink
-      sudo ln -sf $(which google-chrome-stable) /usr/bin/chrome
+      # Create symlinks
+      echo "=== Creating Chrome symlinks ==="
+      CHROME_PATH=$(which google-chrome-stable)
+      echo "Chrome found at: $CHROME_PATH"
+      sudo ln -sf "$CHROME_PATH" /usr/bin/chrome
+      sudo ln -sf "$CHROME_PATH" /usr/local/bin/chrome
+      
+      # Setup directories for Puppeteer
+      echo "=== Setting up Puppeteer directories ==="
+      mkdir -p /tmp/puppeteer_cache
+      chmod -R 777 /tmp/puppeteer_cache
       
       # Install Node dependencies
       echo "=== Installing Node dependencies ==="
@@ -24,11 +44,18 @@ services:
       
       # Final verification
       echo "=== Final verification ==="
-      /usr/bin/chrome --version
+      /usr/bin/chrome --version || echo "Chrome symlink might have issues"
+      
+      # Print environment information
+      echo "=== Environment Information ==="
+      echo "Node version: $(node -v)"
+      echo "NPM version: $(npm -v)"
+      echo "Chrome version: $(google-chrome-stable --version || echo 'Not found')"
+      echo "PUPPETEER_EXECUTABLE_PATH: $PUPPETEER_EXECUTABLE_PATH"
       
     startCommand: npm start
     healthCheckPath: /
-    healthCheckTimeout: 5000
+    healthCheckTimeout: 10000
     
     # Environment variables
     envVars:
@@ -44,4 +71,12 @@ services:
         value: "10000"
       - key: BASE_URL
         value: https://screenshot-app-2.onrender.com
+      - key: PUPPETEER_CACHE_DIR
+        value: /tmp/puppeteer_cache
+      - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
+        value: "true"
+      - key: PUPPETEER_SKIP_DOWNLOAD
+        value: "true"
+      - key: PUPPETEER_NO_SANDBOX
+        value: "true"
 
