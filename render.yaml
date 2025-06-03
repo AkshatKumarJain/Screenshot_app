@@ -4,33 +4,51 @@ services:
     env: node
     plan: free
     buildCommand: |
-      # Update package lists and install Chromium
-      echo "=== Installing Chromium ==="
+      # Update package lists
+      echo "=== Updating System Packages ==="
       sudo apt-get update
-      sudo apt-get install -y chromium chromium-browser
+      sudo apt-get install -y ca-certificates fonts-liberation libasound2 libatk-bridge2.0-0 \
+        libatk1.0-0 libc6 libcairo2 libcups2 libdbus-1-3 libexpat1 libfontconfig1 \
+        libgbm1 libgcc1 libglib2.0-0 libgtk-3-0 libnspr4 libnss3 libpango-1.0-0 \
+        libpangocairo-1.0-0 libstdc++6 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 \
+        libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 \
+        libxss1 libxtst6 lsb-release xdg-utils wget
+
+      # Create directories for Puppeteer
+      echo "=== Setting up Puppeteer directories ==="
+      sudo mkdir -p /usr/local/share/puppeteer
+      sudo chmod -R 777 /usr/local/share/puppeteer
       
-      # Create necessary directories with proper permissions
-      echo "=== Setting up directories ==="
-      sudo mkdir -p /opt/render/chrome
-      sudo mkdir -p /opt/render/.cache/puppeteer
-      sudo chmod -R 777 /opt/render/.cache/puppeteer
-      sudo chmod -R 777 /opt/render/chrome
+      # Install Node dependencies first (without Puppeteer)
+      echo "=== Installing Node dependencies ==="
+      npm ci --omit=optional
       
-      # Create symlink for Chrome
-      echo "=== Creating Chrome symlink ==="
-      CHROME_PATH=$(which chromium || which chromium-browser)
-      echo "Found Chromium at: $CHROME_PATH"
-      sudo ln -sf $CHROME_PATH /opt/render/chrome/chrome
-      sudo chmod +x /opt/render/chrome/chrome
+      # Now install Puppeteer and Chrome
+      echo "=== Installing Puppeteer and Chrome ==="
+      export PUPPETEER_DOWNLOAD_PATH=/usr/local/share/puppeteer
+      npm install puppeteer
+      
+      # Install Chrome using Puppeteer's CLI
+      echo "=== Installing Chrome browser ==="
+      npx puppeteer browsers install chrome
+      
+      # Find Chrome path and create symlink
+      echo "=== Setting up Chrome symlink ==="
+      CHROME_PATH=$(find /usr/local/share/puppeteer -name "chrome*" -type f -executable | head -n 1)
+      if [ -n "$CHROME_PATH" ]; then
+        echo "Found Chrome at: $CHROME_PATH"
+        sudo mkdir -p /opt/render/chrome
+        sudo ln -sf "$CHROME_PATH" /opt/render/chrome/chrome
+        sudo chmod +x /opt/render/chrome/chrome
+      else
+        echo "ERROR: Could not find Chrome executable!"
+        exit 1
+      fi
       
       # Verify Chrome installation
       echo "=== Verifying Chrome installation ==="
       /opt/render/chrome/chrome --version || echo "Failed to get Chrome version"
       ls -la /opt/render/chrome
-      
-      # Install dependencies
-      echo "=== Installing Node dependencies ==="
-      PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true npm ci
       
     startCommand: npm start
     healthCheckPath: /
@@ -40,14 +58,12 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
-        value: "true"
       - key: PUPPETEER_EXECUTABLE_PATH
         value: /opt/render/chrome/chrome
       - key: CHROME_PATH
         value: /opt/render/chrome/chrome
-      - key: PUPPETEER_CACHE_DIR
-        value: /opt/render/.cache/puppeteer
+      - key: PUPPETEER_DOWNLOAD_PATH
+        value: /usr/local/share/puppeteer
       - key: RENDER
         value: "true"
       - key: PORT
