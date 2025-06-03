@@ -84,7 +84,7 @@ export async function captureScreenshot(imageUrl, savePath) {
     // Configure Puppeteer based on environment
     let options;
     
-    if (isProduction) {
+    if (isProduction || process.env.RENDER === 'true') {
       // Special configuration for Render environment
       console.log("Using Render-specific Puppeteer configuration");
       
@@ -94,8 +94,8 @@ export async function captureScreenshot(imageUrl, savePath) {
       
       options = {
         headless: 'new',
-        // Don't set executablePath on Render - let Puppeteer use its bundled Chromium
-        executablePath: isOnRender ? undefined : (process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable'),
+        // Always use the specific Chrome path we set up in render.yaml
+        executablePath: '/opt/render/chrome/chrome',
         userDataDir: userDataDir,
         timeout: 180000, // 3 minutes overall timeout
         ignoreHTTPSErrors: true,
