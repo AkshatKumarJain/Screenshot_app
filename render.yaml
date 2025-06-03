@@ -4,152 +4,54 @@ services:
     env: node
     plan: free
     buildCommand: |
-      # Update package lists and install essential Chrome dependencies
+      # Update package lists and install Chromium
+      echo "=== Installing Chromium ==="
       sudo apt-get update
-      sudo apt-get install -y \
-        gnupg curl wget ca-certificates \
-        fonts-liberation \
-        libappindicator3-1 \
-        libasound2 \
-        libatk-bridge2.0-0 \
-        libatk1.0-0 \
-        libcairo2 \
-        libcups2 \
-        libdbus-1-3 \
-        libexpat1 \
-        libfontconfig1 \
-        libgbm1 \
-        libgcc1 \
-        libglib2.0-0 \
-        libgtk-3-0 \
-        libnspr4 \
-        libnss3 \
-        libpango-1.0-0 \
-        libpangocairo-1.0-0 \
-        libstdc++6 \
-        libx11-6 \
-        libx11-xcb1 \
-        libxcb1 \
-        libxcomposite1 \
-        libxcursor1 \
-        libxdamage1 \
-        libxext6 \
-        libxfixes3 \
-        libxi6 \
-        libxrandr2 \
-        libxrender1 \
-        libxss1 \
-        libxtst6 \
-        lsb-release \
-        xdg-utils \
-        libgdk-pixbuf2.0-0 \
-        libgtk2.0-0 \
-        libnotify-dev \
-        libgconf-2-4 \
-        libxinerama1 \
-        libxkbcommon0 \
-        xvfb
+      sudo apt-get install -y chromium chromium-browser
       
-      # Install Chrome via Puppeteer
-      echo "===== Installing Chrome via Puppeteer browser installer ====="
-      # Make sure Puppeteer will download Chromium
-      unset PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
+      # Create necessary directories with proper permissions
+      echo "=== Setting up directories ==="
+      sudo mkdir -p /opt/render/chrome
+      sudo mkdir -p /opt/render/.cache/puppeteer
+      sudo chmod -R 777 /opt/render/.cache/puppeteer
+      sudo chmod -R 777 /opt/render/chrome
       
-      # Install Puppeteer and download Chromium
-      npm install puppeteer
-      npx puppeteer browsers install chrome
+      # Create symlink for Chrome
+      echo "=== Creating Chrome symlink ==="
+      CHROME_PATH=$(which chromium || which chromium-browser)
+      echo "Found Chromium at: $CHROME_PATH"
+      sudo ln -sf $CHROME_PATH /opt/render/chrome/chrome
+      sudo chmod +x /opt/render/chrome/chrome
       
-      # Find Chrome executable and create symbolic link
-      CHROME_EXEC=$(find ./node_modules/puppeteer -name "chrome*" -type f -executable | head -n 1)
-      if [ -n "$CHROME_EXEC" ]; then
-        echo "Found Puppeteer Chrome at: $CHROME_EXEC"
-        mkdir -p /opt/render/chrome
-        ln -sf "$CHROME_EXEC" /opt/render/chrome/chrome
-        chmod +x /opt/render/chrome/chrome
-      else
-        echo "ERROR: Could not find Chrome executable in Puppeteer installation!"
-      fi
+      # Verify Chrome installation
+      echo "=== Verifying Chrome installation ==="
+      /opt/render/chrome/chrome --version || echo "Failed to get Chrome version"
+      ls -la /opt/render/chrome
       
-      # Create Chrome user data directory
-      mkdir -p /tmp/chrome-user-data
-      chmod -R 777 /tmp/chrome-user-data
+      # Install dependencies
+      echo "=== Installing Node dependencies ==="
+      PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true npm ci
       
-      # Create Puppeteer cache directories
-      mkdir -p /tmp/puppeteer
-      chmod -R 777 /tmp/puppeteer
-      mkdir -p $HOME/.cache/puppeteer
-      chmod -R 777 $HOME/.cache/puppeteer
-      
-      # Simple Puppeteer test
-      cat > /tmp/puppeteer-test.mjs << EOL
-      import puppeteer from 'puppeteer';
-      
-      async function testPuppeteer() {
-        console.log('Starting Puppeteer test...');
-        
-        try {
-          console.log('Launching browser...');
-          const browser = await puppeteer.launch({
-            headless: 'new',
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-            executablePath: '/opt/render/chrome/chrome'
-          });
-          
-          const page = await browser.newPage();
-          await page.setContent('<html><body><h1>Puppeteer Test</h1></body></html>');
-          await page.screenshot({ path: '/tmp/puppeteer-test.png' });
-          await browser.close();
-          console.log('Puppeteer test completed successfully');
-        } catch (error) {
-          console.error('Puppeteer test failed:', error);
-          process.exit(1);
-        }
-      }
-      
-      // Immediately invoke the test function
-      testPuppeteer();
-      EOL
-      
-      # Run quick test to verify Puppeteer works
-      node /tmp/puppeteer-test.mjs
-      
-      # Install Node dependencies
-      npm ci
     startCommand: npm start
     healthCheckPath: /
     healthCheckTimeout: 5000
-    
-    # Resource configuration
-    autoscaling:
-      minInstances: 1
-      maxInstances: 1
-    disk:
-      name: chrome-data
-      mountPath: /tmp/chrome-user-data
-      sizeGB: 1
     
     # Environment variables
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 10000
-      # RENDER_EXTERNAL_URL is automatically provided by Render
-      - key: RENDER_EXTERNAL_URL
-        sync: false
-      # Chrome/Puppeteer configuration
+      - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
+        value: "true"
       - key: PUPPETEER_EXECUTABLE_PATH
         value: /opt/render/chrome/chrome
       - key: CHROME_PATH
         value: /opt/render/chrome/chrome
       - key: PUPPETEER_CACHE_DIR
-        value: /tmp/puppeteer
+        value: /opt/render/.cache/puppeteer
       - key: RENDER
-        value: true
-      # Allow Puppeteer to download Chromium during npm install
-      - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
-        value: false
-      # Set the base URL for the application
+        value: "true"
+      - key: PORT
+        value: "10000"
       - key: BASE_URL
         value: https://screenshot-app-2.onrender.com
 
