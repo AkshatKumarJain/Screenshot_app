@@ -5,6 +5,12 @@ import { __dirname } from './utils/pathHelper.util.js';
 import fs from 'fs';
 import os from 'os';
 import puppeteer from 'puppeteer';
+import { exec, execSync } from 'child_process';
+import { promisify } from 'util';
+import { fileURLToPath } from 'url';
+
+// Helper for async execution
+const execAsync = promisify(exec);
 
 import uploadRoute from './routes/upload.route.js';
 import screenshotRoute from './routes/screenshot.route.js';
@@ -95,21 +101,43 @@ app.get('/debug', async (req, res) => {
     let chromeVersion = null;
     
     try {
-      const { execSync } = require('child_process');
-      const { existsSync } = require('fs');
-      
       // Try each possible path
       for (const path of possibleChromePaths) {
         try {
-          if (existsSync(path)) {
+          if (fs.existsSync(path)) {
             console.log(`Chrome found at: ${path}`);
             execPath = path;
-            chromeVersion = execSync(`${path} --version`).toString().trim();
-            console.log(`Chrome version: ${chromeVersion}`);
-            break;
+            try {
+              chromeVersion = execSync(`${path} --version`).toString().trim();
+              console.log(`Chrome version: ${chromeVersion}`);
+              break;
+            } catch (versionErr) {
+              console.log(`Found Chrome at ${path} but couldn't get version: ${versionErr.message}`);
+              // Still set the path even if we can't get the version
+              chromeVersion = "Unknown version";
+            }
           }
         } catch (err) {
           console.log(`Failed to check ${path}: ${err.message}`);
+        }
+      }
+      
+      // Try checking for Chrome using 'which' command as a fallback
+      if (!execPath) {
+        try {
+          const { stdout } = await execAsync('which google-chrome-stable || which google-chrome || which chromium-browser || which chromium');
+          const chromePath = stdout.trim();
+          if (chromePath && fs.existsSync(chromePath)) {
+            console.log(`Chrome found via 'which' at: ${chromePath}`);
+            execPath = chromePath;
+            try {
+              chromeVersion = execSync(`${chromePath} --version`).toString().trim();
+            } catch (e) {
+              chromeVersion = "Unknown version";
+            }
+          }
+        } catch (whichErr) {
+          console.log(`Failed to find Chrome using 'which': ${whichErr.message}`);
         }
       }
       
@@ -143,6 +171,33 @@ app.get('/debug', async (req, res) => {
       const isOnRender = process.env.RENDER === 'true';
       console.log(`Running on Render: ${isOnRender}`);
       
+      // Check if Chrome is properly installed before proceeding
+      if (!execPath) {
+        console.log("No Chrome installation found in standard locations. Will use Puppeteer's bundled Chrome.");
+        
+        // Check for Puppeteer browser installation directories
+        const possiblePuppeteerDirs = [
+          '/opt/render/.cache/puppeteer',
+          `${process.env.HOME}/.cache/puppeteer`,
+          '/tmp/puppeteer',
+          './.cache/puppeteer'
+        ];
+        
+        for (const dir of possiblePuppeteerDirs) {
+          try {
+            if (fs.existsSync(dir)) {
+              console.log(`Puppeteer cache directory found at: ${dir}`);
+              // List contents to see what's available
+              const dirContents = fs.readdirSync(dir);
+              console.log(`Contents: ${dirContents.join(', ')}`);
+              break;
+            }
+          } catch (err) {
+            console.log(`Failed to check Puppeteer dir ${dir}: ${err.message}`);
+          }
+        }
+      }
+      
       const minimalOptions = {
         headless: 'new',
         args: [
@@ -152,21 +207,54 @@ app.get('/debug', async (req, res) => {
           '--disable-gpu',
           '--no-first-run',
           '--single-process'
-        ],
-        ignoreDefaultArgs: ['--disable-extensions'],
-        channel: 'chrome'
+        ]
       };
       
       // Only set executablePath if we found a valid Chrome
       if (execPath) {
+        console.log(`Setting Chrome executable path to: ${execPath}`);
         minimalOptions.executablePath = execPath;
+      } else {
+        console.log("Using Puppeteer's default Chrome path");
+        // Don't set executablePath - let Puppeteer find Chrome on its own
       }
       
       console.log(`Launch options: ${JSON.stringify(minimalOptions, null, 2)}`);
       
-      const browser = await puppeteer.launch(minimalOptions);
-      const version = await browser.version();
-      console.log(`Browser launched successfully. Version: ${version}`);
+      let browser;
+      try {
+        // Try launching with minimal options first
+        browser = await puppeteer.launch(minimalOptions);
+        const version = await browser.version();
+        console.log(`Browser launched successfully. Version: ${version}`);
+        
+        diagnostics.chrome.browserVersion = version;
+        diagnostics.tests[1].status = "success";
+        diagnostics.tests[1].result = version;
+      } catch (launchError) {
+        console.error(`Failed to launch browser with options: ${JSON.stringify(minimalOptions)}`);
+        console.error(`Error: ${launchError.message}`);
+        
+        // Try again with default options
+        console.log("Trying again with default options (no executablePath)...");
+        
+        try {
+          browser = await puppeteer.launch({
+            headless: 'new',
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+          });
+          
+          const version = await browser.version();
+          console.log(`Browser launched successfully with default options. Version: ${version}`);
+          
+          diagnostics.chrome.browserVersion = version;
+          diagnostics.tests[1].status = "success";
+          diagnostics.tests[1].result = `${version} (using default options)`;
+        } catch (fallbackError) {
+          console.error(`Failed to launch browser with fallback options: ${fallbackError.message}`);
+          throw new Error(`All browser launch attempts failed. Primary error: ${launchError.message}, Fallback error: ${fallbackError.message}`);
+        }
+      }
       
       diagnostics.chrome.browserVersion = version;
       diagnostics.tests[1].status = "success";
