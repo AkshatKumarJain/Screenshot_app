@@ -54,26 +54,53 @@ services:
         libxkbcommon0 \
         xvfb
       
-      # Install Chrome using the recommended method
-      echo "===== Installing Chrome ====="
-      wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-      sudo dpkg -i /tmp/chrome.deb || sudo apt-get install -fy
-      rm /tmp/chrome.deb
+      # Install Chrome using multiple methods for redundancy
+      echo "===== Installing Chrome - Method 1: apt repository ====="
+      # Add Google Chrome repository
+      wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+      echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+      sudo apt-get update
+      sudo apt-get install -y google-chrome-stable
       
       # Verify Chrome installation and show version
       echo "===== Verifying Chrome Installation ====="
+      google-chrome-stable --version || echo "Chrome not installed via apt"
+      
+      echo "===== Installing Chrome - Method 2: Direct download ====="
+      wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+      sudo dpkg -i /tmp/chrome.deb || sudo apt-get -f install -y
+      rm /tmp/chrome.deb
+      
+      # Verify Chrome installation again
       google-chrome-stable --version
       
-      # Print Chrome path for debugging
-      echo "===== Chrome Path ====="
+      # Install Chrome via Puppeteer (Method 3)
+      echo "===== Installing Chrome - Method 3: Puppeteer browser installer ====="
+      npm install -g puppeteer
+      npx puppeteer browsers install chrome
+      
+      # Print Chrome paths for debugging
+      echo "===== Chrome Paths ====="
       which google-chrome-stable
       ls -la /usr/bin/google-chrome-stable
+      echo "Puppeteer browser path (might be empty if not installed yet):"
+      ls -la $(npm root -g)/puppeteer/.local-chromium/ 2>/dev/null || echo "No Puppeteer browser installed"
       
-      # Create a chrome-user directory and set permissions
-      echo "===== Setting up Chrome User Directory ====="
+      # Create chrome-user directories and set permissions
+      echo "===== Setting up Chrome User Directories ====="
       mkdir -p /tmp/chrome-user-data
       chmod -R 777 /tmp/chrome-user-data
       ls -la /tmp/chrome-user-data
+      
+      # Create puppeteer cache directory
+      mkdir -p /tmp/puppeteer
+      chmod -R 777 /tmp/puppeteer
+      
+      # Create .cache directory in project and home
+      mkdir -p /opt/render/.cache/puppeteer
+      chmod -R 777 /opt/render/.cache/puppeteer
+      mkdir -p $HOME/.cache/puppeteer
+      chmod -R 777 $HOME/.cache/puppeteer
       
       # System checks
       echo "===== System Information ====="
@@ -112,9 +139,47 @@ services:
       echo "===== Verifying Screenshot Creation ====="
       ls -la /tmp/chrome-test/
       
+      # Test puppeteer directly
+      echo "===== Testing Puppeteer with Chrome ====="
+      cat > /tmp/puppeteer-test.js << EOL
+      const puppeteer = require('puppeteer');
+      
+      async function testPuppeteer() {
+        console.log('Starting Puppeteer test...');
+        try {
+          const browser = await puppeteer.launch({
+            headless: 'new',
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+            executablePath: '/usr/bin/google-chrome-stable'
+          });
+          console.log('Browser launched successfully');
+          
+          const page = await browser.newPage();
+          console.log('Page created successfully');
+          
+          await page.setContent('<html><body><h1>Puppeteer Test</h1></body></html>');
+          console.log('Content set successfully');
+          
+          await page.screenshot({ path: '/tmp/puppeteer-test.png' });
+          console.log('Screenshot taken successfully');
+          
+          await browser.close();
+          console.log('Test completed successfully');
+        } catch (error) {
+          console.error('Puppeteer test failed:', error);
+        }
+      }
+      
+      testPuppeteer();
+      EOL
+      
+      # Run the Puppeteer test
+      echo "Running Puppeteer test script..."
+      node /tmp/puppeteer-test.js
+      
       # Install Node dependencies with production optimization
       echo "===== Installing Node Dependencies ====="
-      npm ci --omit=dev
+      npm ci
     startCommand: npm start
     healthCheckPath: /
     healthCheckTimeout: 5000
@@ -144,8 +209,16 @@ services:
       # Additional Chrome configuration
       - key: CHROME_PATH
         value: /usr/bin/google-chrome-stable
+      - key: PUPPETEER_EXECUTABLE_PATH
+        value: /usr/bin/google-chrome-stable
       - key: PUPPETEER_CACHE_DIR
-        value: /tmp
+        value: /tmp/puppeteer
       - key: PUPPETEER_DOWNLOAD_HOST
         value: https://storage.googleapis.com
+      - key: RENDER
+        value: true
+      - key: PUPPETEER_SKIP_DOWNLOAD
+        value: true
+      - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
+        value: true
 

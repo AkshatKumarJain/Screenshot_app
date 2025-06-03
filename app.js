@@ -79,14 +79,51 @@ app.get('/debug', async (req, res) => {
     diagnostics.tests.push({ name: "Chrome executable check", status: "running" });
     console.log('Checking Chrome executable...');
     
-    const execPath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable';
+    // Check for Chrome in multiple possible locations
+    const possibleChromePaths = [
+      process.env.PUPPETEER_EXECUTABLE_PATH,
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/google-chrome',
+      '/usr/bin/chromium',
+      '/usr/bin/chromium-browser'
+    ].filter(Boolean); // Remove undefined values
+    
+    diagnostics.chrome.possiblePaths = possibleChromePaths;
+    console.log("Checking for Chrome in these locations:", possibleChromePaths);
+    
+    let execPath = null;
+    let chromeVersion = null;
+    
     try {
       const { execSync } = require('child_process');
-      const chromeVersion = execSync(`${execPath} --version`).toString().trim();
-      console.log(`Chrome version: ${chromeVersion}`);
-      diagnostics.chrome.version = chromeVersion;
-      diagnostics.tests[0].status = "success";
-      diagnostics.tests[0].result = chromeVersion;
+      const { existsSync } = require('fs');
+      
+      // Try each possible path
+      for (const path of possibleChromePaths) {
+        try {
+          if (existsSync(path)) {
+            console.log(`Chrome found at: ${path}`);
+            execPath = path;
+            chromeVersion = execSync(`${path} --version`).toString().trim();
+            console.log(`Chrome version: ${chromeVersion}`);
+            break;
+          }
+        } catch (err) {
+          console.log(`Failed to check ${path}: ${err.message}`);
+        }
+      }
+      
+      if (execPath) {
+        diagnostics.chrome.version = chromeVersion;
+        diagnostics.chrome.path = execPath;
+        diagnostics.tests[0].status = "success";
+        diagnostics.tests[0].result = chromeVersion;
+      } else {
+        // Try using puppeteer's own mechanism
+        console.log("No Chrome found in standard locations. Trying puppeteer's mechanism...");
+        diagnostics.tests[0].status = "warning";
+        diagnostics.tests[0].result = "No Chrome found in standard locations. Will try puppeteer's mechanism.";
+      }
     } catch (error) {
       console.error(`Error checking Chrome version: ${error.message}`);
       diagnostics.tests[0].status = "failed";
@@ -102,15 +139,28 @@ app.get('/debug', async (req, res) => {
     console.log('Attempting to launch browser...');
     
     try {
+      // Use puppeteer.connect with browserWSEndpoint if on Render
+      const isOnRender = process.env.RENDER === 'true';
+      console.log(`Running on Render: ${isOnRender}`);
+      
       const minimalOptions = {
         headless: 'new',
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage'
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--no-first-run',
+          '--single-process'
         ],
-        executablePath: execPath
+        ignoreDefaultArgs: ['--disable-extensions'],
+        channel: 'chrome'
       };
+      
+      // Only set executablePath if we found a valid Chrome
+      if (execPath) {
+        minimalOptions.executablePath = execPath;
+      }
       
       console.log(`Launch options: ${JSON.stringify(minimalOptions, null, 2)}`);
       
