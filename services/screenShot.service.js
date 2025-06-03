@@ -87,9 +87,15 @@ export async function captureScreenshot(imageUrl, savePath) {
     if (isProduction) {
       // Special configuration for Render environment
       console.log("Using Render-specific Puppeteer configuration");
+      
+      // Check if running on Render
+      const isOnRender = !!process.env.RENDER;
+      console.log(`Running on Render: ${isOnRender}`);
+      
       options = {
         headless: 'new',
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',
+        // Don't set executablePath on Render - let Puppeteer use its bundled Chromium
+        executablePath: isOnRender ? undefined : (process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable'),
         userDataDir: userDataDir,
         timeout: 180000, // 3 minutes overall timeout
         ignoreHTTPSErrors: true,
