@@ -55,29 +55,80 @@ services:
         xvfb
       
       # Install Chrome using the recommended method
+      echo "===== Installing Chrome ====="
       wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
       sudo dpkg -i /tmp/chrome.deb || sudo apt-get install -fy
       rm /tmp/chrome.deb
       
       # Verify Chrome installation and show version
+      echo "===== Verifying Chrome Installation ====="
       google-chrome-stable --version
       
-      # Create a chrome-user directory and set permissions
-      mkdir -p /tmp/chrome-user-data
-      chmod -R 777 /tmp/chrome-user-data
-      
-      # Verify Chrome can run headless
-      google-chrome-stable --headless --disable-gpu --no-sandbox --disable-dev-shm-usage --user-data-dir=/tmp/chrome-user-data about:blank --dump-dom
-      
-      # Install Node dependencies with production optimization
-      npm ci --omit=dev
-      
       # Print Chrome path for debugging
+      echo "===== Chrome Path ====="
       which google-chrome-stable
       ls -la /usr/bin/google-chrome-stable
+      
+      # Create a chrome-user directory and set permissions
+      echo "===== Setting up Chrome User Directory ====="
+      mkdir -p /tmp/chrome-user-data
+      chmod -R 777 /tmp/chrome-user-data
+      ls -la /tmp/chrome-user-data
+      
+      # System checks
+      echo "===== System Information ====="
+      echo "Memory:"
+      free -h
+      echo "Disk space:"
+      df -h
+      echo "CPU info:"
+      lscpu | grep "Model name"
+      
+      # Create test HTML file for Chrome
+      echo "===== Creating Test HTML ====="
+      cat > /tmp/test.html << EOL
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Chrome Test</title>
+      </head>
+      <body>
+        <h1>Chrome Test</h1>
+        <p>This is a test page for Chrome.</p>
+        <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mNkYPhfz0AEYBxVSF+FAP4iBBwAlqN0AAAAAElFTkSuQmCC" alt="Test Image">
+      </body>
+      </html>
+      EOL
+      
+      # Verify Chrome can run headless and capture screenshots
+      echo "===== Testing Chrome Headless Mode ====="
+      mkdir -p /tmp/chrome-test
+      google-chrome-stable --headless --disable-gpu --no-sandbox --disable-dev-shm-usage --user-data-dir=/tmp/chrome-user-data /tmp/test.html --dump-dom
+      
+      echo "===== Testing Chrome Screenshot Capability ====="
+      google-chrome-stable --headless --disable-gpu --no-sandbox --disable-dev-shm-usage --user-data-dir=/tmp/chrome-user-data --screenshot=/tmp/chrome-test/test.png /tmp/test.html
+      
+      # Verify screenshot was created
+      echo "===== Verifying Screenshot Creation ====="
+      ls -la /tmp/chrome-test/
+      
+      # Install Node dependencies with production optimization
+      echo "===== Installing Node Dependencies ====="
+      npm ci --omit=dev
     startCommand: npm start
     healthCheckPath: /
     healthCheckTimeout: 5000
+    
+    # Memory and CPU limits
+    autoscaling:
+      minInstances: 1
+      maxInstances: 1
+    env: node
+    plan: free
+    disk:
+      name: chrome-data
+      mountPath: /tmp/chrome-user-data
+      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
