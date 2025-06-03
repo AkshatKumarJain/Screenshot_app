@@ -1,5 +1,5 @@
 import express from 'express';
-import { handleScreenshot } from '../controllers/screenshotController.js';
+import { handleScreenshot } from '../controllers/screenShot.controller.js';
 
 const router = express.Router();
 router.get('/', handleScreenshot);
