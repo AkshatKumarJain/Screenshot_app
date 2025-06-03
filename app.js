@@ -2,11 +2,23 @@ import express from 'express';
 import path from 'path';
 import 'dotenv/config.js';
 import { __dirname } from './utils/pathHelper.util.js';
+import fs from 'fs';
+import os from 'os';
+import puppeteer from 'puppeteer';
 
 import uploadRoute from './routes/upload.route.js';
 import screenshotRoute from './routes/screenshot.route.js';
 
+// Create middleware for request logging
+const requestLogger = (req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+};
+
 const app = express();
+
+// Add request logging middleware
+app.use(requestLogger);
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
@@ -14,24 +26,14 @@ app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-app.get('/', (req, res) => {
-  res.render('index');
-});
-
-app.get('/preview', (req, res) => {
-  const imageUrl = req.query.image;
-  res.render('image_view', { imageUrl });
-});
-
-app.use('/upload', uploadRoute);
-app.use('/screenshot', screenshotRoute);
-
-// Debug route to test Puppeteer and Chrome
+// Debug route to test Puppeteer and Chrome - register before other routes
 app.get('/debug', async (req, res) => {
   console.log('=== DEBUG ROUTE ACCESSED ===');
   
+  // Set response timeout
+  res.setTimeout(120000); // 2 minute timeout
+  
   // Log system info
-  const os = await import('os');
   console.log('System information:');
   console.log(`  Platform: ${os.platform()}`);
   console.log(`  Architecture: ${os.arch()}`);
@@ -46,8 +48,6 @@ app.get('/debug', async (req, res) => {
   console.log(`  Heap Used: ${Math.round(memoryUsage.heapUsed / 1024 / 1024)} MB`);
   
   try {
-    // Import puppeteer
-    const puppeteer = await import('puppeteer');
     console.log('Puppeteer imported successfully');
     
     // Create test HTML content
@@ -132,6 +132,46 @@ app.get('/debug', async (req, res) => {
   }
 });
 
-app.listen(process.env.PORT, () => {
-  console.log(`The server is running at port:${process.env.PORT}`);
+// Register other routes AFTER debug route
+app.get('/', (req, res) => {
+  res.render('index');
+});
+
+app.get('/preview', (req, res) => {
+  const imageUrl = req.query.image;
+  res.render('image_view', { imageUrl });
+});
+
+app.use('/upload', uploadRoute);
+app.use('/screenshot', screenshotRoute);
+
+// Add a 404 handler
+app.use((req, res) => {
+  console.log(`404 Not Found: ${req.method} ${req.url}`);
+  res.status(404).send('404 - Not Found');
+});
+
+// Add an error handler
+app.use((err, req, res, next) => {
+  console.error('Application error:', err);
+  res.status(500).send(`Server Error: ${err.message}`);
+});
+
+// Start server with error handling
+const server = app.listen(process.env.PORT || 8000, () => {
+  console.log(`The server is running at port:${process.env.PORT || 8000}`);
+});
+
+server.on('error', (error) => {
+  console.error('Server error:', error);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
 });
