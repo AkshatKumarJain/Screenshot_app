@@ -149,4 +149,7 @@ services:
       # Allow Puppeteer to download Chromium during npm install
       - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
         value: false
+      # Set the base URL for the application
+      - key: BASE_URL
+        value: https://screenshot-app-2.onrender.com
 
