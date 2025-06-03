@@ -2,6 +2,7 @@ import puppeteer from 'puppeteer';
 import { exec } from 'child_process';
 import util from 'util';
 import os from 'os';
+import fs from 'fs';
 
 const execPromise = util.promisify(exec);
 
