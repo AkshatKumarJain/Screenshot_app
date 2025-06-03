@@ -3,10 +3,16 @@ services:
     name: screenshot-app
     env: node
     plan: free
+    runtime: node
+    nodeVersion: 18.x
     buildCommand: |
       # Set non-interactive mode for apt
       export DEBIAN_FRONTEND=noninteractive
 
+      # Skip Puppeteer download since we're using system Chrome
+      export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+      export PUPPETEER_SKIP_DOWNLOAD=true
+      
       # Add Chrome repository and install Chrome
       echo "=== Installing Chrome dependencies ==="
       sudo apt-get update -y
@@ -38,9 +44,13 @@ services:
       mkdir -p /tmp/puppeteer_cache
       chmod -R 777 /tmp/puppeteer_cache
       
+      # Modify package.json to remove the postinstall script temporarily
+      echo "=== Modifying package.json to skip Puppeteer postinstall ==="
+      sed -i 's/"postinstall": "node node_modules\/puppeteer\/install.js"/"postinstall": "echo Skipping Puppeteer download"/g' package.json
+      
       # Install Node dependencies
       echo "=== Installing Node dependencies ==="
-      npm ci
+      npm ci --no-optional
       
       # Final verification
       echo "=== Final verification ==="
